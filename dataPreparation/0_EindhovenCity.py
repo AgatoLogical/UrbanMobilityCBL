@@ -102,7 +102,7 @@ def create_access_gdf(pois = None, network = None, maxdist = 1000):
     network.precompute(maxdist + 1) # 1500 meters = ~15-minute walk
 
     # Maps each POI to its nearest street intersection (or node) in the walkable street network
-    df_keep["node_ids"] = network.get_node_ids(df_keep["lat"], df_keep["lon"])
+    #df_keep["node_ids"] = network.get_node_ids(df_keep["lat"], df_keep["lon"])
 
     cat_list_str = pois['category'].unique()
     print("cat_list_str: ", cat_list_str)
@@ -140,7 +140,8 @@ def create_access_gdf(pois = None, network = None, maxdist = 1000):
     access = pd.merge(
         accessibility.reset_index().drop(columns=[1], errors="ignore"),  # drop extra col if exists
         network.nodes_df.reset_index(),
-        on ='osmid'
+        #on ='osmid'
+        on = 'id'
     )
     # add metadata
     for col in ['ID_UC_G0', 'GC_CNT_GAD_2025', 'GC_UCN_MAI_2025', 'GC_POP_TOT_2025', 'GC_UCA_KM2_2025', 'UC_NM_CTR']:
@@ -156,59 +157,96 @@ def create_access_gdf(pois = None, network = None, maxdist = 1000):
 
     return access
 
-city = 'Eindhoven'
+# city = 'Eindhoven'
 
-print(f"calculating accessibility for {city}")
+# print(f"calculating accessibility for {city}")
 
-# subset pois for specific urban center
-pois = df_keep
-pois = gpd.GeoDataFrame(pois, geometry=gpd.points_from_xy(pois.lon, pois.lat))
-# # get boundary coords of urban center
+# # subset pois for specific urban center
+# pois = df_keep
+# pois = gpd.GeoDataFrame(pois, geometry=gpd.points_from_xy(pois.lon, pois.lat))
+# # # get boundary coords of urban center
+# # lng_min = pois.total_bounds[0] #lng_min
+# # lat_min = pois.total_bounds[1] #lat_min
+# # lng_max = pois.total_bounds[2] #lng_max
+# # lat_max = pois.total_bounds[3] #lat_max
+
+# # # get pedestrian network
+# # network = osm.pdna_network_from_bbox(lat_min, lng_min, lat_max, lng_max, network_type='walk')
+
+# print("initialize network pois")
+# # Use osmnx to get walkable street network for Eindhoven
+# G = ox.graph_from_place("Eindhoven, Netherlands", network_type = "walk")
+# G = ox.project_graph(G)
+
+# # Convert to Pandana network
+# # splits G into two gdf: nodes (intersections, dead ends) and edges (street segments)
+# gdf_nodes, gdf_edges = ox.convert.graph_to_gdfs(G, nodes = True, edges = True, node_geometry = True, fill_edge_geometry = True) 
+
+# gdf_nodes = gdf_nodes.reset_index()
+# gdf_edges = gdf_edges.reset_index()
+
+# gdf_nodes['osmid'] = gdf_nodes['osmid'].astype(np.int64)
+# gdf_nodes['x'] = gdf_nodes['x'].astype(np.float64)
+# gdf_nodes['y'] = gdf_nodes['y'].astype(np.float64)
+
+# gdf_edges['u'] = gdf_edges['u'].astype(np.int64)
+# gdf_edges['v'] = gdf_edges['v'].astype(np.int64)
+# gdf_edges['length'] = gdf_edges['length'].astype(np.float64)
+
+# gdf_edges = gdf_edges[gdf_edges['u'].isin(gdf_nodes['osmid']) & gdf_edges['v'].isin(gdf_nodes['osmid'])]
+
+# gdf_nodes.set_index('osmid', inplace = True)
+
+# # Then pass directly to pandana
+# # IMPORTANT: to run, downgrade numpy to 1.23.5
+# net = pdna.Network(
+#     gdf_nodes['x'],
+#     gdf_nodes['y'],
+#     gdf_edges['u'],
+#     gdf_edges['v'],
+#     gdf_edges[['length']]
+# )
+
 # lng_min = pois.total_bounds[0] #lng_min
 # lat_min = pois.total_bounds[1] #lat_min
 # lng_max = pois.total_bounds[2] #lng_max
 # lat_max = pois.total_bounds[3] #lat_max
-
+    
 # # get pedestrian network
 # network = osm.pdna_network_from_bbox(lat_min, lng_min, lat_max, lng_max, network_type='walk')
 
-print("initialize network pois")
-# Use osmnx to get walkable street network for Eindhoven
-G = ox.graph_from_place("Eindhoven, Netherlands", network_type = "walk")
-G = ox.project_graph(G)
+# access = create_access_gdf(pois = pois, network = network, maxdist = 1500)
 
-# Convert to Pandana network
-# splits G into two gdf: nodes (intersections, dead ends) and edges (street segments)
-gdf_nodes, gdf_edges = ox.convert.graph_to_gdfs(G, nodes = True, edges = True, node_geometry = True, fill_edge_geometry = True) 
+# access.to_csv(f"{city}.csv")
 
-gdf_nodes = gdf_nodes.reset_index()
-gdf_edges = gdf_edges.reset_index()
+# print(access.head())
 
-gdf_nodes['osmid'] = gdf_nodes['osmid'].astype(np.int64)
-gdf_nodes['x'] = gdf_nodes['x'].astype(np.float64)
-gdf_nodes['y'] = gdf_nodes['y'].astype(np.float64)
+# Changes in column naming:
+# ID_HDC_G0 -> ID_UC_G0
+# CTR_MN_NM -> GC_CNT_GAD_2025
+# UC_NM_MN -> GC_UCN_MAI_2025
+# P15 -> GC_POP_TOT_2025
+# AREA -> GC_UCA_KM2_2025
+# geometry -> geometry
 
-gdf_edges['u'] = gdf_edges['u'].astype(np.int64)
-gdf_edges['v'] = gdf_edges['v'].astype(np.int64)
-gdf_edges['length'] = gdf_edges['length'].astype(np.float64)
 
-gdf_edges = gdf_edges[gdf_edges['u'].isin(gdf_nodes['osmid']) & gdf_edges['v'].isin(gdf_nodes['osmid'])]
+# Filter for Eindhoven
+eindhoven_df = df_keep[df_keep["UC_NM_CTR"].str.contains("Eindhoven", case=False)]
 
-gdf_nodes.set_index('osmid', inplace = True)
+if not eindhoven_df.empty:
+    city = eindhoven_df["ID_UC_G0"].unique()[0]
+    city_name = eindhoven_df["UC_NM_CTR"].unique()[0]
+    print(f"Calculating accessibility for {city_name}")
 
-# Then pass directly to pandana
-# IMPORTANT: to run, downgrade numpy to 1.23.5
-net = pdna.Network(
-    gdf_nodes['x'],
-    gdf_nodes['y'],
-    gdf_edges['u'],
-    gdf_edges['v'],
-    gdf_edges[['length']]
-)
+    pois = gpd.GeoDataFrame(
+        eindhoven_df, geometry=gpd.points_from_xy(eindhoven_df.lon, eindhoven_df.lat)
+    )
 
-access = create_access_gdf(pois = pois, network = net, maxdist = 1500)
+    lng_min, lat_min, lng_max, lat_max = pois.total_bounds
 
-access.to_csv(f"{city}.csv")
+    network = osm.pdna_network_from_bbox(lat_min, lng_min, lat_max, lng_max, network_type='walk')
+    access = create_access_gdf(pois=pois, network=network, maxdist=1500)
 
-print(access.head())
-
+    access.to_csv(f"{city}.csv")
+else:
+    print("Eindhoven data not found in df_keep.")
